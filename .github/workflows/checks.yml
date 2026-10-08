@@ -1,0 +1,50 @@
+name: 검증
+
+# PR 검사와 배포가 똑같은 검증을 거치도록, 실제 단계는 여기 한 곳에만 둔다.
+# 배포 워크플로는 여기에 basePath 를 넘기고 결과물을 Pages 아티팩트로 올리게 한다.
+on:
+  workflow_call:
+    inputs:
+      base-path:
+        description: 정적 내보내기에 주입할 basePath (Pages 프로젝트 하위 경로)
+        type: string
+        default: ''
+      upload-pages-artifact:
+        description: 빌드 결과를 Pages 배포용 아티팩트로 올릴지
+        type: boolean
+        default: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      # typecheck 가 next typegen 을 먼저 돌린다. 라우트/레이아웃 타입은 생성물이라
+      # 새 체크아웃에는 존재하지 않는다.
+      - name: 타입 검사
+        run: npm run typecheck
+
+      - name: 린트
+        run: npm run lint
+
+      - name: 테스트
+        run: npm test
+
+      - name: 빌드
+        run: npm run build
+        env:
+          NEXT_PUBLIC_BASE_PATH: ${{ inputs.base-path }}
+
+      - name: Pages 아티팩트 업로드
+        if: inputs.upload-pages-artifact
+        uses: actions/upload-pages-artifact@v4
+        with:
+          path: out

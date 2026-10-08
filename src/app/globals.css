@@ -1,0 +1,108 @@
+@import 'tailwindcss';
+
+/*
+ * 혼돈의 주문서 아이콘에서 따 온 단일 다크 테마.
+ *
+ * 바닥은 아이콘 몸통의 남보라 기 도는 검정(#000000 · #111122 · #222244 · #332255),
+ * 강조는 아이콘의 빨강(#dd0044)이다. 빨강은 어두운 바닥 위 글자로 쓰기엔 어두워서
+ * 글자용으로 한 단 밝힌 --chaos-ink 를 따로 둔다.
+ *
+ * 전략 지도의 계열색 2종(계속 = 빨강, 손절 = 파랑)은 dataviz 검증기 all-pairs 기준을
+ * 통과한 조합이다 (dark, surface #14111c): CVD ΔE 20.1, 정상 시력 ΔE 28.8.
+ * 그래도 칸마다 문자 라벨을 함께 넣는다. 색을 바꾸면 validate_palette.js 를 다시 돌릴 것.
+ */
+:root {
+  color-scheme: dark;
+
+  --surface-0: #0a090e; /* 페이지 바닥 */
+  --surface-1: #14111c; /* 패널 = 차트 표면 */
+  --surface-2: #1c1826;
+  --surface-3: #262033;
+
+  --ink-1: #f1eef6;
+  --ink-2: #b7b0c6;
+  --ink-3: #7e7791;
+
+  --line: #2c2639;
+  --line-strong: #3b3350;
+
+  --chaos: #dd0044; /* 아이콘의 빨강 — 테두리·막대 */
+  --chaos-ink: #ff4d79; /* 글자용으로 밝힌 빨강 */
+  --chaos-dim: #5c1530;
+
+  --series-go: #e0245e; /* 혼줌 계속 */
+  --series-stop: #5b80d6; /* 손절 */
+  --series-done: #3d3752; /* 달성 (색이 아니라 상태) */
+
+  --good: #3ccf7a;
+  --warn: #fab219;
+}
+
+@theme inline {
+  --color-surface-0: var(--surface-0);
+  --color-surface-1: var(--surface-1);
+  --color-surface-2: var(--surface-2);
+  --color-surface-3: var(--surface-3);
+  --color-ink-1: var(--ink-1);
+  --color-ink-2: var(--ink-2);
+  --color-ink-3: var(--ink-3);
+  --color-line: var(--line);
+  --color-line-strong: var(--line-strong);
+  --color-accent: var(--chaos-ink);
+  --color-chaos: var(--chaos);
+  --font-pixel: 'Galmuri11', 'Apple SD Gothic Neo', sans-serif;
+  --font-pixel-mono: 'GalmuriMono11', 'Galmuri11', ui-monospace, monospace;
+}
+
+/* 바닥색은 html 이 깐다 — body 배경이 캔버스로 전파되면 스크롤마다 그라디언트가 반복된다. */
+html {
+  background-color: var(--surface-0);
+}
+
+body {
+  background: radial-gradient(ellipse 120% 80% at 50% 0%, #1f0f1c 0%, transparent 60%) no-repeat;
+  color: var(--ink-1);
+  font-family: var(--font-pixel);
+  -webkit-font-smoothing: none;
+  font-smooth: never;
+}
+
+/* 클래식 아이템창 느낌의 2px 테두리 + 안쪽 하이라이트 */
+.panel {
+  background: var(--surface-1);
+  border: 2px solid var(--line-strong);
+  box-shadow:
+    inset 0 0 0 1px #0d0b13,
+    0 2px 0 0 #050408;
+}
+
+.panel-head {
+  background: linear-gradient(180deg, var(--surface-3) 0%, var(--surface-2) 100%);
+  border-bottom: 2px solid var(--line-strong);
+  box-shadow: inset 3px 0 0 0 var(--chaos);
+}
+
+.inset {
+  background: #0f0d15;
+  border: 1px solid var(--line);
+  box-shadow: inset 0 1px 0 0 #07060a;
+}
+
+input[type='number'] {
+  font-family: var(--font-pixel-mono);
+  font-variant-numeric: tabular-nums;
+}
+input[type='number']::-webkit-outer-spin-button,
+input[type='number']::-webkit-inner-spin-button {
+  appearance: none;
+  margin: 0;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* 픽셀 아이콘은 확대해도 뭉개지지 않아야 한다 */
+.pixelated {
+  image-rendering: pixelated;
+}

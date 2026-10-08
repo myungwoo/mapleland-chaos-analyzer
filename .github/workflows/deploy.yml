@@ -1,0 +1,53 @@
+name: GitHub Pages 배포
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 배포는 중간에 끊기면 안 되므로 취소하지 않고 줄을 세운다.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  # PR 과 완전히 같은 검증을 거친 뒤에만 배포한다.
+  checks:
+    uses: ./.github/workflows/checks.yml
+    with:
+      base-path: /${{ github.event.repository.name }}
+      upload-pages-artifact: true
+
+  deploy:
+    needs: checks
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5
+      # 통합 사이트(mapleland.myungwoo.kr)는 이 리포의 푸시를 감지하지 못한다.
+      # 배포가 끝났다고 알려 줘야 그쪽도 최신 코드로 다시 빌드한다.
+      # 시크릿이 없으면 조용히 넘어간다(시크릿 등록 전이거나 포크인 경우).
+      - name: Notify mapleland-utils
+        env:
+          TOKEN: ${{ secrets.MAPLELAND_UTILS_DISPATCH }}
+        run: |
+          if [ -z "${TOKEN:-}" ]; then
+            echo "MAPLELAND_UTILS_DISPATCH 시크릿이 없어 알리지 않았습니다."
+            exit 0
+          fi
+          curl -fsS -X POST \
+            -H "Authorization: Bearer $TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            https://api.github.com/repos/myungwoo/mapleland-utils/dispatches \
+            -d "$(jq -nc --arg repo "$GITHUB_REPOSITORY" --arg sha "$GITHUB_SHA" \
+                  '{event_type:"utils-updated",client_payload:{repo:$repo,sha:$sha}}')"
+          echo "mapleland-utils 재빌드를 요청했습니다."

@@ -1,0 +1,140 @@
+'use client';
+
+import { useMemo } from 'react';
+import { ACT_CONTINUE, ACT_GOAL, judge, type Analysis } from '@/lib/chaos';
+import { formatMeso, formatPercent } from '@/lib/format';
+import type { StatId } from './inputs';
+import type { Progress } from './storage';
+import { useDebounced } from './useDebounced';
+import { NumberField, Panel, Stat } from './ui';
+
+/**
+ * 지금 들고 있는 아이템(또는 장터에서 본 매물)을 넣으면 할 일을 알려 준다.
+ *
+ * 격자 칸이 아니라 아무 수치나 받는다 — 시작 수치가 다른 매물을 평가할 때도 쓰라는 뜻이다.
+ * 그래서 이 상태에서 따로 풀고, 손절하면 전체 최소 기대비용으로 다시 시작한다고 본다.
+ */
+export function StateAdvisor({
+  analysis,
+  targetIds,
+  progress,
+  onChange,
+}: {
+  analysis: Analysis;
+  targetIds: StatId[];
+  progress: Progress;
+  onChange: (p: Progress) => void;
+}) {
+  const { problem, solution } = analysis;
+  const slots = Math.min(progress.slots ?? problem.slots, problem.slots);
+  const values = problem.stats.map((s, i) => progress.values[targetIds[i]] ?? s.start);
+
+  // 칸을 칠 때마다 다시 풀지 않도록 손이 멎은 뒤의 값만 쓴다. 배열은 매 렌더 새로 생기므로
+  // 문자열 키로 바꿔 넘긴다.
+  const settledKey = useDebounced([slots, ...values].join(','));
+  const verdict = useMemo(() => {
+    const [u, ...vals] = settledKey.split(',').map(Number);
+    // 목표 능력치 수가 막 바뀐 순간에는 늦춘 키가 아직 예전 길이다.
+    const ok = vals.length === problem.stats.length && u <= problem.slots;
+    return ok
+      ? judge(problem, solution.expectedCost, vals, u)
+      : judge(problem, solution.expectedCost, problem.stats.map((s) => s.start), problem.slots);
+  }, [problem, solution.expectedCost, settledKey]);
+
+  const set = (patch: Partial<Progress>) => onChange({ ...progress, ...patch });
+  const fresh =
+    slots === problem.slots && values.every((v, i) => v === problem.stats[i].start);
+
+  const headline =
+    verdict.action === ACT_GOAL
+      ? '목표 달성! 더 바르지 마세요.'
+      : verdict.action === ACT_CONTINUE
+        ? '혼돈의 주문서를 한 장 더 바르세요.'
+        : slots === 0
+          ? '업횟을 다 썼습니다. 처분하고 새로 시작하세요.'
+          : '여기서 손절하고 새 아이템으로 시작하는 게 낫습니다.';
+  const color =
+    verdict.action === ACT_GOAL
+      ? 'var(--ink-1)'
+      : verdict.action === ACT_CONTINUE
+        ? 'var(--chaos-ink)'
+        : 'var(--series-stop)';
+
+  return (
+    <Panel
+      title="현재 상황 판정"
+      hint="지금 아이템 또는 장터 매물"
+      right={
+        !fresh && (
+          <button
+            type="button"
+            className="inset px-2 py-0.5 text-[11px] text-ink-2 hover:text-ink-1"
+            onClick={() => onChange({ slots: null, values: {} })}
+          >
+            새 아이템으로
+          </button>
+        )
+      }
+    >
+      <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
+        <div className="flex flex-col gap-2">
+          <NumberField
+            label="남은 업횟"
+            value={slots}
+            onChange={(v) =>
+              set({ slots: Math.max(0, Math.min(problem.slots, Math.round(v ?? problem.slots))) })
+            }
+            suffix="회"
+            min={0}
+            max={problem.slots}
+          />
+          {problem.stats.map((s, i) => (
+            <NumberField
+              key={targetIds[i]}
+              label={s.label}
+              value={values[i]}
+              onChange={(v) =>
+                set({ values: { ...progress.values, [targetIds[i]]: Math.max(0, v ?? 0) } })
+              }
+              suffix={`/ ${s.target}`}
+              min={0}
+            />
+          ))}
+        </div>
+        <div className="flex flex-col gap-2">
+          <p className="text-[15px] leading-relaxed" style={{ color }}>
+            {headline}
+          </p>
+          <div className="grid grid-cols-2 gap-2 lg:grid-cols-4">
+            <Stat
+              label="이 아이템으로 달성"
+              value={formatPercent(verdict.successHere)}
+              sub={verdict.action === ACT_CONTINUE ? '전략대로 바를 때' : undefined}
+            />
+            <Stat
+              label="앞으로 더 들 돈"
+              value={formatMeso(verdict.remainingCost)}
+              sub="손절·재시작 포함 기대값"
+            />
+            <Stat
+              label="더 바를 혼줌"
+              value={`${verdict.scrollsHere.toFixed(1)}장`}
+              sub="이 아이템에, 기대값"
+            />
+            <Stat
+              label="이 상태의 값어치"
+              value={formatMeso(verdict.worth)}
+              sub="이보다 싸면 사는 게 이득"
+              tone="accent"
+            />
+          </div>
+          <p className="text-[11px] leading-relaxed text-ink-3">
+            &ldquo;값어치&rdquo;는 새 아이템부터 시작하는 기대비용({formatMeso(solution.expectedCost)})에서
+            이 상태로 이어 가는 기대비용을 뺀 값입니다. 장터에서 본 매물의 수치와 업횟을 넣으면
+            그 매물에 얼마까지 낼 만한지가 됩니다.
+          </p>
+        </div>
+      </div>
+    </Panel>
+  );
+}
