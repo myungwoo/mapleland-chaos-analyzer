@@ -45,6 +45,23 @@ describe('저장값 검사', () => {
     ]);
   });
 
+  it('합 목표가 없던 예전 저장값은 빈 목록으로 연다', () => {
+    const { sums, ...old } = DEFAULT_INPUTS;
+    void sums;
+    expect(sanitizeInputs(old).sums).toEqual([]);
+  });
+
+  it('합 목표의 모르는 능력치·중복은 걸러 내되, 목록에 없는 능력치는 남긴다', () => {
+    const got = sanitizeInputs({
+      ...DEFAULT_INPUTS,
+      sums: [{ ids: ['dex', 'dex', 'charm', 'luk'], min: 30 }, { ids: 'x', min: -1 }],
+    });
+    expect(got.sums).toEqual([
+      { ids: ['dex', 'luk'], min: 30 },
+      { ids: [], min: null },
+    ]);
+  });
+
   it('확률이 전부 0 이거나 길이가 다르면 기본 분포로', () => {
     expect(sanitizeInputs({ ...DEFAULT_INPUTS, deltas: new Array(11).fill(0) }).deltas).toEqual(
       DEFAULT_INPUTS.deltas,
@@ -71,6 +88,34 @@ describe('입력 → 문제', () => {
 
   it('최소값을 하나도 안 걸면 거절한다', () => {
     const r = toProblem({ ...DEFAULT_INPUTS, stats: DEFAULT_INPUTS.stats.map((s) => ({ ...s, min: null })) });
+    expect(r.ok).toBe(false);
+  });
+
+  it('합 목표에 낀 능력치는 최소값이 없어도 상태에 들어간다', () => {
+    const r = toProblem({
+      ...DEFAULT_INPUTS,
+      stats: [
+        { id: 'str', start: 4, min: 5 },
+        { id: 'dex', start: 10, min: null },
+        { id: 'luk', start: 12, min: null },
+        { id: 'def', start: 20, min: null },
+      ],
+      sums: [{ ids: ['luk', 'dex', 'int'], min: 30 }],
+    });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.targetIds).toEqual(['str', 'dex', 'luk']);
+    expect(r.problem.stats.map((s) => s.target)).toEqual([5, undefined, undefined]);
+    // 목록에 없는 인트는 빠지고, 인덱스는 상태 순서를 따른다
+    expect(r.problem.sums).toEqual([{ stats: [2, 1], min: 30 }]);
+  });
+
+  it('최소값이 빈 합 목표는 목표가 아니다', () => {
+    const r = toProblem({
+      ...DEFAULT_INPUTS,
+      stats: [{ id: 'dex', start: 10, min: null }],
+      sums: [{ ids: ['dex'], min: null }],
+    });
     expect(r.ok).toBe(false);
   });
 

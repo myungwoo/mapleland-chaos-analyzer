@@ -7,12 +7,15 @@ import {
   DEFAULT_DELTAS,
   DELTA_VALUES,
   MAX_STATS,
+  MAX_SUMS,
   MAX_TARGETS,
   STAT_KINDS,
+  activeSums,
   statKind,
   type Inputs,
   type StatId,
   type StatRow,
+  type SumRow,
 } from './inputs';
 import { NumberField, Panel } from './ui';
 
@@ -53,7 +56,25 @@ export function InputPanel({
             max={20}
           />
         </div>
-        <StatEditor stats={inputs.stats} onChange={(stats) => patch({ stats })} />
+        <StatEditor
+          inputs={inputs}
+          onChange={(stats, rename) =>
+            patch({
+              stats,
+              // 능력치 종류를 바꾸면 그 능력치를 고른 합 목표도 따라 바뀐다.
+              sums: rename
+                ? inputs.sums.map((g) => ({
+                    ...g,
+                    ids: g.ids.map((id) => (id === rename.from ? rename.to : id)),
+                  }))
+                : inputs.sums,
+            })
+          }
+        />
+      </Panel>
+
+      <Panel title="합 목표" hint="선택 · 예) 덱스+럭 30 이상">
+        <SumEditor inputs={inputs} onChange={(sums) => patch({ sums })} />
       </Panel>
 
       <Panel title="시세" hint="만 메소">
@@ -134,10 +155,18 @@ export function InputPanel({
   );
 }
 
-function StatEditor({ stats, onChange }: { stats: StatRow[]; onChange: (s: StatRow[]) => void }) {
+function StatEditor({
+  inputs,
+  onChange,
+}: {
+  inputs: Inputs;
+  onChange: (s: StatRow[], rename?: { from: StatId; to: StatId }) => void;
+}) {
+  const { stats } = inputs;
   const used = new Set(stats.map((s) => s.id));
   const free = STAT_KINDS.filter((k) => !used.has(k.id));
-  const targets = stats.filter((s) => s.min !== null && s.min > 0).length;
+  const inSum = new Set(activeSums(inputs).flatMap((g) => g.ids));
+  const axes = stats.filter((s) => (s.min !== null && s.min > 0) || inSum.has(s.id)).length;
   const set = (i: number, row: Partial<StatRow>) =>
     onChange(stats.map((s, j) => (j === i ? { ...s, ...row } : s)));
 
@@ -150,15 +179,19 @@ function StatEditor({ stats, onChange }: { stats: StatRow[]; onChange: (s: StatR
         <span />
         {stats.map((row, i) => {
           const kind = statKind(row.id);
-          const dead = row.min !== null && row.min > 0 && !(row.start !== null && row.start > 0);
           return (
             <StatLine
               key={row.id}
               row={row}
               options={[kind, ...free]}
               unitHint={kind.step > 1 ? `${kind.step} 단위` : undefined}
-              dead={dead}
-              onKind={(id) => set(i, { id })}
+              dead={row.min !== null && row.min > 0 && !(row.start !== null && row.start > 0)}
+              onKind={(id) =>
+                onChange(
+                  stats.map((s, j) => (j === i ? { ...s, id } : s)),
+                  { from: row.id, to: id },
+                )
+              }
               onStart={(v) => set(i, { start: v })}
               onMin={(v) => set(i, { min: v })}
               onRemove={() => onChange(stats.filter((_, j) => j !== i))}
@@ -176,10 +209,90 @@ function StatEditor({ stats, onChange }: { stats: StatRow[]; onChange: (s: StatR
         </button>
       )}
       <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
-        최소값을 적은 능력치가 <b className="text-ink-2">모두</b> 동시에 그 이상이면 목표 달성입니다
-        ({targets}/{MAX_TARGETS}). 최소값이 빈 능력치는 결과 분포에만 쓰입니다. 0 이하로 떨어진
-        능력치는 사라져 다시 오르지 않습니다.
+        최소값과 아래 합 목표가 <b className="text-ink-2">모두</b> 동시에 채워지면 달성입니다.
+        목표에 쓰이는 능력치 {axes}/{MAX_TARGETS}. 목표에 안 쓰이는 능력치는 결과 분포에만
+        쓰입니다. 0 이하로 떨어진 능력치는 사라져 다시 오르지 않습니다.
       </p>
+    </div>
+  );
+}
+
+/**
+ * 합 목표 편집기. 능력치 목록에서 칩을 눌러 고르고 최소 합을 적는다.
+ * 목록에서 빠진 능력치를 고른 상태는 지우지 않고 흐리게 둔다 (계산에서만 빠진다).
+ */
+function SumEditor({ inputs, onChange }: { inputs: Inputs; onChange: (s: SumRow[]) => void }) {
+  const { stats, sums } = inputs;
+  const set = (i: number, row: Partial<SumRow>) =>
+    onChange(sums.map((g, j) => (j === i ? { ...g, ...row } : g)));
+
+  return (
+    <div className="flex flex-col gap-2">
+      {sums.length === 0 && (
+        <p className="text-[11px] leading-relaxed text-ink-3">
+          여러 능력치의 <b className="text-ink-2">합</b>이 일정 이상이면 되는 경우(합스탯 작)에
+          씁니다. 사라진 능력치는 0 으로 칩니다.
+        </p>
+      )}
+      {sums.map((g, i) => {
+        const total = stats
+          .filter((s) => g.ids.includes(s.id))
+          .reduce((a, s) => a + (s.start ?? 0), 0);
+        return (
+          <div key={i} className="inset flex flex-col gap-1.5 px-2 py-1.5">
+            <div className="flex flex-wrap gap-1">
+              {stats.map((s) => {
+                const on = g.ids.includes(s.id);
+                return (
+                  <button
+                    key={s.id}
+                    type="button"
+                    aria-pressed={on}
+                    className={`border px-1.5 py-0.5 text-[11px] ${
+                      on
+                        ? 'border-[color:var(--chaos)] bg-[color:var(--chaos-dim)] text-ink-1'
+                        : 'border-line text-ink-3 hover:text-ink-2'
+                    }`}
+                    onClick={() =>
+                      set(i, { ids: on ? g.ids.filter((id) => id !== s.id) : [...g.ids, s.id] })
+                    }
+                  >
+                    {statKind(s.id).label}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="grid grid-cols-[minmax(0,1fr)_4.5rem_1.25rem] items-center gap-1.5 text-[11px]">
+              <span className="tabular text-ink-3">
+                {g.ids.length ? `지금 합 ${total}` : '능력치를 고르세요'}
+              </span>
+              <MiniNumber
+                label={`합 목표 ${i + 1} 최소`}
+                value={g.min}
+                onChange={(v) => set(i, { min: v })}
+                placeholder="합 ≥"
+              />
+              <button
+                type="button"
+                aria-label={`합 목표 ${i + 1} 빼기`}
+                className="text-ink-3 hover:text-accent"
+                onClick={() => onChange(sums.filter((_, j) => j !== i))}
+              >
+                ×
+              </button>
+            </div>
+          </div>
+        );
+      })}
+      {sums.length < MAX_SUMS && stats.length > 0 && (
+        <button
+          type="button"
+          className="inset w-full px-2 py-1 text-[11px] text-ink-2 hover:text-ink-1"
+          onClick={() => onChange([...sums, { ids: [], min: null }])}
+        >
+          + 합 목표 추가
+        </button>
+      )}
     </div>
   );
 }

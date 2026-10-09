@@ -7,9 +7,12 @@ import {
   costDistribution,
   cycleOutcomes,
   finalStatDistribution,
+  finalSumDistribution,
   flatIndex,
+  goalsOf,
   judge,
   kernelOf,
+  kOf,
   solve,
   type ChaosProblem,
   type Outcome,
@@ -66,8 +69,9 @@ function bruteForce(problem: ChaosProblem): number {
 
   const f = (R: number) => {
     const memo = new Map<string, number>();
+    const goals = goalsOf(problem);
     const V = (u: number, vals: number[]): number => {
-      const goal = vals.every((v, i) => v >= problem.stats[i].target);
+      const goal = goals.every((g) => g.axes.reduce((a, i) => a + vals[i], 0) >= g.min);
       if (goal) return 0;
       const key = `${u}|${vals.join(',')}`;
       const hit = memo.get(key);
@@ -122,12 +126,8 @@ function simulate(problem: ChaosProblem, runs: number, seed = 1) {
       let u = problem.slots;
       let ok = false;
       for (;;) {
-        const r = vals.map((v, i) => {
-          const a = item.axes[i];
-          return v <= 0 ? -1e9 : Math.round((v - a.start) / a.step) - a.need;
-        });
         const layer = item.layers[u];
-        const act = layer.act[flatIndex(layer, r)];
+        const act = layer.act[flatIndex(item, layer, kOf(item, vals))];
         if (act === ACT_GOAL) {
           ok = true;
           break;
@@ -256,6 +256,125 @@ describe('독립 구현과 대조', () => {
       expect(sol.expectedCost / bruteForce(problem)).toBeCloseTo(1, 8);
     });
   }
+});
+
+describe('합 목표', () => {
+  const sumBase = (over: Partial<ChaosProblem> = {}): ChaosProblem => ({
+    ...base,
+    salvage: 200_000,
+    slots: 5,
+    stats: [
+      { label: '덱스', start: 4, step: 1 },
+      { label: '럭', start: 3, step: 1 },
+    ],
+    sums: [{ stats: [0, 1], min: 12 }],
+    ...over,
+  });
+
+  it('독립 구현과 8자리까지 맞는다', () => {
+    const problem = sumBase();
+    expect(solve(problem).expectedCost / bruteForce(problem)).toBeCloseTo(1, 8);
+  });
+
+  it('개별 최소값과 합 목표를 섞어도 맞는다', () => {
+    const problem = sumBase({
+      stats: [
+        { label: '덱스', start: 4, step: 1, target: 5 },
+        { label: '럭', start: 3, step: 1 },
+      ],
+      sums: [{ stats: [0, 1], min: 11 }],
+      slots: 4,
+    });
+    expect(solve(problem).expectedCost / bruteForce(problem)).toBeCloseTo(1, 8);
+  });
+
+  it('사라진 능력치는 0 으로 치고, 남은 능력치가 합을 채울 수 있다', () => {
+    // 1회째: 각자 −3 이면 소멸(0), +4. 2회째 남은 쪽이 또 +4 하면 합 ≥ 11.
+    const problem: ChaosProblem = {
+      ...base,
+      successRate: 1,
+      deltas: [
+        { value: -3, probability: 0.5 },
+        { value: 4, probability: 0.5 },
+      ],
+      slots: 2,
+      stats: [
+        { label: 'A', start: 3, step: 1 },
+        { label: 'B', start: 3, step: 1 },
+      ],
+      sums: [{ stats: [0, 1], min: 11 }],
+    };
+    // 1회 뒤 (7,7)=¼ → 합 14 달성. (7,0)·(0,7)=½ → 2회째 +4 면 11 → ½. (0,0)=¼ → 불가.
+    expect(solve(problem).baseline.successPerItem).toBeCloseTo(0.25 + 0.5 * 0.5, 12);
+    // 소멸한 쪽은 2회째 굴림을 받지 않고 0 에 머문다. 독립 구현도 같은 규칙으로 맞는지 본다.
+    expect(bruteForce(problem)).toBeCloseTo(solve(problem).expectedCost, 4);
+  });
+
+  it('합 목표를 낮추면 싸진다', () => {
+    const costs = [14, 12, 10, 8].map((min) => solve(sumBase({ sums: [{ stats: [0, 1], min }] })).expectedCost);
+    for (let i = 1; i < costs.length; i++) expect(costs[i]).toBeLessThan(costs[i - 1]);
+  });
+
+  it('합 하나는 같은 목표의 개별 최소값보다 쉽다', () => {
+    const sum = solve(sumBase({ sums: [{ stats: [0, 1], min: 12 }] })).expectedCost;
+    const each = solve(
+      sumBase({
+        stats: [
+          { label: '덱스', start: 4, step: 1, target: 6 },
+          { label: '럭', start: 3, step: 1, target: 6 },
+        ],
+        sums: [],
+      }),
+    ).expectedCost;
+    expect(sum).toBeLessThan(each);
+  });
+
+  it('합 목표 아래에서도 정책을 굴린 기대비용이 4σ 안에 든다', () => {
+    const problem = sumBase({ slots: 6, sums: [{ stats: [0, 1], min: 14 }] });
+    const runs = 30_000;
+    const sim = simulate(problem, runs, 11);
+    expect(Math.abs(sim.mean - sim.sol.expectedCost)).toBeLessThan((4 * sim.sd) / Math.sqrt(runs));
+  });
+
+  it('업횟을 다 바른 합 분포는 직접 굴린 것과 맞는다', () => {
+    const problem = { successRate: 0.6, deltas: COMMUNITY_DELTAS };
+    const stats = [
+      { start: 4, step: 1 },
+      { start: 2, step: 1 },
+    ];
+    const exact = finalSumDistribution(problem, stats, 3);
+    expect(exact.reduce((a, o) => a + o.probability, 0)).toBeCloseTo(1, 12);
+
+    // 3회를 전부 펼쳐서 센다
+    const k = kernelOf(COMMUNITY_DELTAS);
+    const brute = new Map<number, number>();
+    const walk = (u: number, vals: number[], m: number) => {
+      if (u === 0) {
+        const sum = vals.reduce((a, b) => a + b, 0);
+        brute.set(sum, (brute.get(sum) ?? 0) + m);
+        return;
+      }
+      walk(u - 1, vals, m * 0.4);
+      for (let a = 0; a < k.values.length; a++) {
+        for (let b = 0; b < k.values.length; b++) {
+          const nv = [k.values[a], k.values[b]].map((d, i) => (vals[i] <= 0 ? 0 : Math.max(0, vals[i] + d)));
+          walk(u - 1, nv, m * 0.6 * k.weights[a] * k.weights[b]);
+        }
+      }
+    };
+    walk(3, [4, 2], 1);
+    for (const o of exact) expect(o.probability).toBeCloseTo(brute.get(o.value) ?? 0, 12);
+  });
+
+  it('능력치 하나짜리 합 분포는 능력치 분포와 같다', () => {
+    const a = finalSumDistribution(base, [{ start: 50, step: 10 }], 5);
+    const b = finalStatDistribution(base, { start: 50, step: 10 }, 5);
+    expect(a.length).toBe(b.length);
+    a.forEach((o, i) => {
+      expect(o.value).toBe(b[i].value);
+      expect(o.probability).toBeCloseTo(b[i].probability, 12);
+    });
+  });
 });
 
 describe('정책을 그대로 굴려 본다', () => {

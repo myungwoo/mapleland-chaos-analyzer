@@ -96,10 +96,21 @@ export function StateAdvisor({
               onChange={(v) =>
                 set({ values: { ...progress.values, [targetIds[i]]: Math.max(0, v ?? 0) } })
               }
-              suffix={`/ ${s.target}`}
+              suffix={s.target !== undefined ? `/ ${s.target}` : undefined}
               min={0}
             />
           ))}
+          {(problem.sums ?? []).map((g, gi) => {
+            const sum = g.stats.reduce((a, i) => a + Math.max(0, values[i]), 0);
+            return (
+              <p key={gi} className="flex justify-between text-[11px] text-ink-3">
+                <span>{g.stats.map((i) => problem.stats[i].label).join('+')}</span>
+                <span className="tabular">
+                  <b className={sum >= g.min ? 'text-ink-1' : 'text-ink-2'}>{sum}</b> / {g.min}
+                </span>
+              </p>
+            );
+          })}
         </div>
         <div className="flex flex-col gap-2">
           <p className="text-[15px] leading-relaxed" style={{ color }}>

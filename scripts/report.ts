@@ -31,6 +31,31 @@ const scenarios: Array<{ name: string; problem: ChaosProblem }> = [
     },
   },
   {
+    name: '합스탯 (업횟 7, 덱 10·럭 12 → 덱+럭 30)',
+    problem: {
+      ...base,
+      slots: 7,
+      stats: [
+        { label: '덱스', start: 10, step: 1 },
+        { label: '럭', start: 12, step: 1 },
+      ],
+      sums: [{ stats: [0, 1], min: 30 }],
+    },
+  },
+  {
+    name: '합스탯 + 개별 (업횟 7, 덱+럭 ≥ 30 · 공 ≥ 3)',
+    problem: {
+      ...base,
+      slots: 7,
+      stats: [
+        { label: '덱스', start: 10, step: 1 },
+        { label: '럭', start: 12, step: 1 },
+        { label: '공격력', start: 1, step: 1, target: 3 },
+      ],
+      sums: [{ stats: [0, 1], min: 30 }],
+    },
+  },
+  {
     name: '3개 (업횟 10, 공 5·힘 3·HP 50 → 8·5·80)',
     problem: {
       ...base,

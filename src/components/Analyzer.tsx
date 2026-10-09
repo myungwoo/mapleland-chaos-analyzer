@@ -3,11 +3,11 @@
 import Image from 'next/image';
 import { useMemo } from 'react';
 import { asset } from '@/lib/asset';
-import { analyze, finalStatDistribution, type Analysis } from '@/lib/chaos';
+import { analyze, finalStatDistribution, finalSumDistribution, type Analysis } from '@/lib/chaos';
 import { formatMeso, formatPercent, MAN } from '@/lib/format';
 import { BarList, Histogram, ProbabilityCurve } from './charts';
 import { InputPanel } from './InputPanel';
-import { statKind, toProblem, type Inputs, type StatId } from './inputs';
+import { activeSums, statKind, sumLabel, toProblem, type Inputs, type StatId } from './inputs';
 import { StateAdvisor } from './StateAdvisor';
 import { StrategyMap } from './StrategyMap';
 import { usePersistedState, type Progress } from './storage';
@@ -98,7 +98,10 @@ function Results({
   const itemName = inputs.itemName.trim() || '아이템';
   const budget = inputs.budget !== null && inputs.budget > 0 ? inputs.budget * MAN : null;
   const finished = inputs.finishedPrice !== null && inputs.finishedPrice > 0 ? inputs.finishedPrice * MAN : null;
-  const goalText = problem.stats.map((s) => `${s.label} ${s.target}`).join(' · ');
+  const goalText = [
+    ...problem.stats.filter((s) => s.target !== undefined).map((s) => `${s.label} ${s.target}`),
+    ...(problem.sums ?? []).map((g) => `${g.stats.map((i) => problem.stats[i].label).join('+')} ${g.min}`),
+  ].join(' · ');
 
   if (!feasible) {
     return (
@@ -304,11 +307,35 @@ function FinalDistributions({ analysis, inputs }: { analysis: Analysis; inputs: 
       const mean = dist.reduce((a, o) => a + o.value * o.probability, 0);
       return { id: s.id, label: kind.label, start: s.start!, min: s.min, dist, mean };
     });
-  if (!rows.length) return null;
+  // 합 목표는 합의 분포를 따로 보여 준다. 능력치별 분포를 더해서는 안 나온다 —
+  // 성공 여부를 공유해서 서로 독립이 아니기 때문이다.
+  const sums = activeSums(inputs).map((g) => {
+    const members = g.ids.map((id) => inputs.stats.find((s) => s.id === id)!);
+    const dist = finalSumDistribution(
+      problem,
+      members.map((s) => ({ start: s.start ?? 0, step: statKind(s.id).step })),
+      problem.slots,
+    );
+    const start = members.reduce((a, s) => a + Math.max(0, s.start ?? 0), 0);
+    const mean = dist.reduce((a, o) => a + o.value * o.probability, 0);
+    return { id: g.ids.join('+'), label: `${sumLabel(g.ids)} 합`, start, min: g.min, dist, mean };
+  });
+  if (!rows.length && !sums.length) return null;
 
   return (
-    <Panel title="업횟을 전부 바르면" hint={`능력치별 · 손절·목표 무시 · ${problem.slots}회`}>
+    <Panel title="업횟을 전부 바르면" hint={`손절·목표 무시 · ${problem.slots}회`}>
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+        {sums.map((r) => (
+          <div key={r.id}>
+            <div className="mb-1 flex items-baseline justify-between text-[12px]">
+              <span className="text-accent">{r.label}</span>
+              <span className="tabular text-[11px] text-ink-3">
+                {r.start} → 평균 {r.mean.toFixed(1)}
+              </span>
+            </div>
+            <Histogram rows={r.dist} threshold={r.min} label={r.label} />
+          </div>
+        ))}
         {rows.map((r) => (
           <div key={r.id}>
             <div className="mb-1 flex items-baseline justify-between text-[12px]">
