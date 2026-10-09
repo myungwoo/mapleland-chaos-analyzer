@@ -1,7 +1,7 @@
 'use client';
 
 import { useMemo } from 'react';
-import { ACT_CONTINUE, ACT_GOAL, judge, type Analysis } from '@/lib/chaos';
+import { ACT_CONTINUE, ACT_GOAL, TooLargeError, judge, type Analysis } from '@/lib/chaos';
 import { formatMeso, formatPercent } from '@/lib/format';
 import type { StatId } from './inputs';
 import type { Progress } from './storage';
@@ -32,18 +32,89 @@ export function StateAdvisor({
   // 칸을 칠 때마다 다시 풀지 않도록 손이 멎은 뒤의 값만 쓴다. 배열은 매 렌더 새로 생기므로
   // 문자열 키로 바꿔 넘긴다.
   const settledKey = useDebounced([slots, ...values].join(','));
-  const verdict = useMemo(() => {
+  const result = useMemo(() => {
     const [u, ...vals] = settledKey.split(',').map(Number);
     // 목표 능력치 수가 막 바뀐 순간에는 늦춘 키가 아직 예전 길이다.
     const ok = vals.length === problem.stats.length && u <= problem.slots;
-    return ok
-      ? judge(problem, solution.expectedCost, vals, u)
-      : judge(problem, solution.expectedCost, problem.stats.map((s) => s.start), problem.slots);
+    // 상태 수 상한은 시작 수치로만 검사했다. 수치를 낮추면 접히던 격자가 펼쳐져 이 상태
+    // 하나만으로 상한을 넘을 수 있다 — 그때 던지면 화면이 통째로 죽고, 그 수치가 저장돼
+    // 있어 새로고침해도 다시 죽는다. 안내로 바꿔 수치를 고칠 수 있게 둔다.
+    try {
+      return ok
+        ? judge(problem, solution.expectedCost, vals, u)
+        : judge(problem, solution.expectedCost, problem.stats.map((s) => s.start), problem.slots);
+    } catch (e) {
+      if (e instanceof TooLargeError) return { tooLarge: e.states };
+      throw e;
+    }
   }, [problem, solution.expectedCost, settledKey]);
 
   const set = (patch: Partial<Progress>) => onChange({ ...progress, ...patch });
   const fresh =
     slots === problem.slots && values.every((v, i) => v === problem.stats[i].start);
+
+  const resetButton = !fresh && (
+    <button
+      type="button"
+      className="inset px-2 py-0.5 text-[11px] text-ink-2 hover:text-ink-1"
+      onClick={() => onChange({ slots: null, values: {} })}
+    >
+      새 아이템으로
+    </button>
+  );
+
+  const fields = (
+    <div className="flex flex-col gap-2">
+      <NumberField
+        label="남은 업횟"
+        value={slots}
+        onChange={(v) =>
+          set({ slots: Math.max(0, Math.min(problem.slots, Math.round(v ?? problem.slots))) })
+        }
+        suffix="회"
+        min={0}
+        max={problem.slots}
+      />
+      {problem.stats.map((s, i) => (
+        <NumberField
+          key={targetIds[i]}
+          label={s.label}
+          value={values[i]}
+          onChange={(v) =>
+            set({ values: { ...progress.values, [targetIds[i]]: Math.max(0, v ?? 0) } })
+          }
+          suffix={s.target !== undefined ? `/ ${s.target}` : undefined}
+          min={0}
+        />
+      ))}
+      {(problem.sums ?? []).map((g, gi) => {
+        const sum = g.stats.reduce((a, i) => a + Math.max(0, values[i]), 0);
+        return (
+          <p key={gi} className="flex justify-between text-[11px] text-ink-3">
+            <span>{g.stats.map((i) => problem.stats[i].label).join('+')}</span>
+            <span className="tabular">
+              <b className={sum >= g.min ? 'text-ink-1' : 'text-ink-2'}>{sum}</b> / {g.min}
+            </span>
+          </p>
+        );
+      })}
+    </div>
+  );
+
+  if ('tooLarge' in result) {
+    return (
+      <Panel title="현재 상황 판정" hint="지금 아이템 또는 장터 매물" right={resetButton}>
+        <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
+          {fields}
+          <p className="text-[13px] leading-relaxed text-ink-2">
+            이 수치에서는 따져 볼 상태가 {result.tooLarge.toLocaleString('ko-KR')}개로 너무 많아
+            판정할 수 없습니다. 수치나 남은 업횟을 바꾸거나 &ldquo;새 아이템으로&rdquo;를 눌러 주세요.
+          </p>
+        </div>
+      </Panel>
+    );
+  }
+  const verdict = result;
 
   const headline =
     verdict.action === ACT_GOAL
@@ -61,57 +132,9 @@ export function StateAdvisor({
         : 'var(--series-stop)';
 
   return (
-    <Panel
-      title="현재 상황 판정"
-      hint="지금 아이템 또는 장터 매물"
-      right={
-        !fresh && (
-          <button
-            type="button"
-            className="inset px-2 py-0.5 text-[11px] text-ink-2 hover:text-ink-1"
-            onClick={() => onChange({ slots: null, values: {} })}
-          >
-            새 아이템으로
-          </button>
-        )
-      }
-    >
+    <Panel title="현재 상황 판정" hint="지금 아이템 또는 장터 매물" right={resetButton}>
       <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
-        <div className="flex flex-col gap-2">
-          <NumberField
-            label="남은 업횟"
-            value={slots}
-            onChange={(v) =>
-              set({ slots: Math.max(0, Math.min(problem.slots, Math.round(v ?? problem.slots))) })
-            }
-            suffix="회"
-            min={0}
-            max={problem.slots}
-          />
-          {problem.stats.map((s, i) => (
-            <NumberField
-              key={targetIds[i]}
-              label={s.label}
-              value={values[i]}
-              onChange={(v) =>
-                set({ values: { ...progress.values, [targetIds[i]]: Math.max(0, v ?? 0) } })
-              }
-              suffix={s.target !== undefined ? `/ ${s.target}` : undefined}
-              min={0}
-            />
-          ))}
-          {(problem.sums ?? []).map((g, gi) => {
-            const sum = g.stats.reduce((a, i) => a + Math.max(0, values[i]), 0);
-            return (
-              <p key={gi} className="flex justify-between text-[11px] text-ink-3">
-                <span>{g.stats.map((i) => problem.stats[i].label).join('+')}</span>
-                <span className="tabular">
-                  <b className={sum >= g.min ? 'text-ink-1' : 'text-ink-2'}>{sum}</b> / {g.min}
-                </span>
-              </p>
-            );
-          })}
-        </div>
+        {fields}
         <div className="flex flex-col gap-2">
           <p className="text-[15px] leading-relaxed" style={{ color }}>
             {headline}
