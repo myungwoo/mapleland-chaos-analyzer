@@ -343,7 +343,7 @@ function MultiMap({
       </div>
 
       {xs.length === 0 || ys.length === 0 ? (
-        <p className="text-[12px] text-ink-3">이 업횟에서는 가망 있는 상태가 없습니다.</p>
+        <p className="text-[12px] text-ink-3">이 업횟에서는 가망 있는 칸이 없습니다.</p>
       ) : (
         <div className="overflow-x-auto">
           <table className="border-separate border-spacing-[2px] text-[11px]">
@@ -393,9 +393,9 @@ function MultiMap({
         </div>
       )}
       <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
-        빨간 숫자가 개별 최소값입니다. 맨 위·맨 오른쪽의 <b className="text-ink-2">N+</b> 는
+        빨간 숫자가 개별 최소값입니다. 맨 위·맨 오른쪽의 <b className="text-ink-2">N+</b>는
         그 위로 판정이 전부 같아서 한 줄로 접은 것이고, <b className="text-ink-2">소멸</b>은
-        0 이하로 떨어져 사라진 상태입니다 (합 목표에만 쓰이는 능력치는 사라져도 다른
+        0 이하로 떨어진 상태입니다(합 목표에만 쓰이는 능력치는 소멸해도 다른
         능력치가 합을 메울 수 있습니다).
       </p>
     </div>
