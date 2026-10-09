@@ -5,10 +5,12 @@ import {
   DEFAULT_INPUTS,
   DELTA_VALUES,
   MAX_STATS,
+  MAX_SUMS,
   STAT_KINDS,
   type Inputs,
   type StatId,
   type StatRow,
+  type SumRow,
 } from './inputs';
 
 /**
@@ -89,6 +91,24 @@ function readStats(value: unknown): StatRow[] {
   return out;
 }
 
+/**
+ * 합 목표. 예전 판(합 목표가 생기기 전)에는 이 칸이 없으니 그때만 기본값(빈 목록)을 쓴다.
+ * 고른 능력치는 알려진 이름만 남기고 중복을 없앤다. 능력치 목록에 없는 이름은 여기서
+ * 지우지 않는다 — 사용자가 능력치를 잠깐 바꿨다 되돌리면 다시 살아나야 한다 (계산에서만 뺀다).
+ */
+function readSums(value: unknown): SumRow[] {
+  if (!Array.isArray(value)) return DEFAULT_INPUTS.sums;
+  return value
+    .slice(0, MAX_SUMS)
+    .filter(isRecord)
+    .map((row) => ({
+      ids: Array.isArray(row.ids)
+        ? [...new Set(row.ids.filter((id): id is StatId => typeof id === 'string' && STAT_IDS.has(id)))]
+        : [],
+      min: optional(row.min, 99999),
+    }));
+}
+
 /** 변화량 확률. 길이가 다르거나 전부 0 이면 분포가 아니므로 통째로 기본값. */
 function readDeltas(value: unknown): number[] {
   if (!Array.isArray(value) || value.length !== DELTA_VALUES.length) return DEFAULT_INPUTS.deltas;
@@ -103,6 +123,7 @@ export function sanitizeInputs(value: unknown): Inputs {
     itemName: typeof value.itemName === 'string' ? value.itemName.slice(0, 40) : base.itemName,
     slots: Math.round(num(value.slots, base.slots, 1, 20)),
     stats: readStats(value.stats),
+    sums: readSums(value.sums),
     successRate: num(value.successRate, base.successRate, 0, 100),
     deltas: readDeltas(value.deltas),
     // 금액 칸은 비워 두는 것도 정상 상태라 null 을 기본값으로 되돌리지 않는다.

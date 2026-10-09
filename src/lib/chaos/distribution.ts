@@ -161,3 +161,66 @@ export function finalStatDistribution(
     .map(([value, probability]) => ({ value, probability }))
     .sort((a, b) => a.value - b.value);
 }
+
+/** 능력치 하나에 성공 굴림을 정확히 n 번 받은 뒤의 수치 분포 (n = 0..maxN). 0 은 소멸. */
+function afterRolls(
+  kernel: ReturnType<typeof kernelOf>,
+  stat: { start: number; step: number },
+  maxN: number,
+): Array<Map<number, number>> {
+  const out: Array<Map<number, number>> = [new Map([[Math.max(0, stat.start), 1]])];
+  for (let n = 1; n <= maxN; n++) {
+    const next = new Map<number, number>();
+    for (const [v, m] of out[n - 1]) {
+      if (v <= 0) {
+        next.set(0, (next.get(0) ?? 0) + m);
+        continue;
+      }
+      for (let i = 0; i < kernel.values.length; i++) {
+        const nv = Math.max(0, v + kernel.values[i] * stat.step);
+        next.set(nv, (next.get(nv) ?? 0) + m * kernel.weights[i]);
+      }
+    }
+    out.push(next);
+  }
+  return out;
+}
+
+/**
+ * 여러 능력치에 업횟을 전부 혼줌으로 채웠을 때 **합**의 분포 (목표·손절 무시).
+ *
+ * 능력치끼리는 성공 여부를 공유해서 독립이 아니다. 하지만 성공 횟수 n 이 정해지면 각
+ * 능력치는 n 번의 굴림을 따로 받으므로 서로 독립이다. 그래서
+ *
+ *     P(합 = s) = Σ_n C(U,n) pⁿ (1−p)^(U−n) · (능력치별 n회 분포의 합성곱)(s)
+ *
+ * 로 정확히 나온다. 사라진 능력치는 0 으로 더한다.
+ */
+export function finalSumDistribution(
+  problem: Pick<ChaosProblem, 'successRate' | 'deltas'>,
+  stats: Array<{ start: number; step: number }>,
+  slots: number,
+): Outcome[] {
+  const kernel = kernelOf(problem.deltas);
+  const p = problem.successRate;
+  const perStat = stats.map((s) => afterRolls(kernel, s, slots));
+  const total = new Map<number, number>();
+  let binom = 1; // C(U, n)
+  for (let n = 0; n <= slots; n++) {
+    if (n > 0) binom = (binom * (slots - n + 1)) / n;
+    const w = binom * p ** n * (1 - p) ** (slots - n);
+    if (w === 0) continue;
+    let conv = new Map<number, number>([[0, 1]]);
+    for (const dists of perStat) {
+      const next = new Map<number, number>();
+      for (const [a, ma] of conv) {
+        for (const [b, mb] of dists[n]) next.set(a + b, (next.get(a + b) ?? 0) + ma * mb);
+      }
+      conv = next;
+    }
+    for (const [v, m] of conv) total.set(v, (total.get(v) ?? 0) + w * m);
+  }
+  return [...total.entries()]
+    .map(([value, probability]) => ({ value, probability }))
+    .sort((a, b) => a.value - b.value);
+}

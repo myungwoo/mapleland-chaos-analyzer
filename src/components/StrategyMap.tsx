@@ -6,6 +6,7 @@ import {
   ACT_GOAL,
   flatIndex,
   type Analysis,
+  type Axis,
   type ItemSolution,
 } from '@/lib/chaos';
 import { formatMeso, formatPercent } from '@/lib/format';
@@ -14,7 +15,7 @@ import { Panel } from './ui';
 /** 칸 하나의 판정. 색은 보조이고 문자 라벨이 정체를 나른다. */
 interface Cell {
   u: number;
-  r: number[];
+  k: number[];
   values: number[];
   kind: 'go' | 'stop' | 'done' | 'none';
   success: number;
@@ -28,25 +29,41 @@ const LOOK = {
   none: { label: '', name: '닿지 않음', color: '#0e0c13', ink: 'transparent' },
 } as const;
 
-function valueOf(item: ItemSolution, i: number, r: number) {
-  const a = item.axes[i];
-  return a.start + a.step * (r + a.need);
+/** k → 실제 수치. 사라진 능력치는 0. */
+function valueOf(a: Axis, k: number) {
+  return k <= a.deadK ? 0 : a.start + a.step * k;
 }
 
-function cellAt(item: ItemSolution, u: number, r: number[]): Cell {
+function valueText(a: Axis, k: number) {
+  return k <= a.deadK ? '소멸' : String(valueOf(a, k));
+}
+
+/** 이 층에서 축 하나가 가질 수 있는 k 들 (아래부터). 합 목표에만 쓰이면 맨 아래에 "소멸" 칸이 붙는다. */
+function axisRange(item: ItemSolution, layer: ItemSolution['layers'][number], i: number) {
+  const a = item.axes[i];
+  const out: number[] = [];
+  if (a.deadAllowed && layer.reachLo[i] <= a.deadK && a.start > 0) out.push(a.deadK);
+  const lo = Math.max(layer.reachLo[i], a.deadK + 1);
+  const hi = Math.min(layer.reachHi[i], layer.safe[i]);
+  for (let k = lo; k <= hi; k++) out.push(k);
+  return out;
+}
+
+function cellAt(item: ItemSolution, u: number, k: number[]): Cell {
   const layer = item.layers[u];
-  const values = r.map((ri, i) => valueOf(item, i, ri));
-  for (let i = 0; i < r.length; i++) {
-    if (r[i] < layer.reachLo[i] || r[i] > layer.reachHi[i]) {
-      return { u, r, values, kind: 'none', success: 0, remaining: 0 };
+  const values = k.map((ki, i) => valueOf(item.axes[i], ki));
+  for (let i = 0; i < k.length; i++) {
+    const dead = k[i] <= item.axes[i].deadK;
+    if ((!dead && k[i] < layer.reachLo[i]) || k[i] > layer.reachHi[i] || (dead && layer.reachLo[i] > item.axes[i].deadK)) {
+      return { u, k, values, kind: 'none', success: 0, remaining: 0 };
     }
   }
-  const idx = flatIndex(layer, r);
+  const idx = flatIndex(item, layer, k);
   const act = layer.act[idx];
   const kind = act === ACT_GOAL ? 'done' : act === ACT_CONTINUE ? 'go' : 'stop';
   return {
     u,
-    r,
+    k,
     values,
     kind,
     success: kind === 'stop' ? 0 : layer.Q[idx],
@@ -74,7 +91,13 @@ export function StrategyMap({
       {item.axes.length === 1 ? (
         <SingleMap item={item} onHover={setHover} onPick={onPick} />
       ) : (
-        <MultiMap item={item} onHover={setHover} onPick={onPick} />
+        // 업횟이나 축이 바뀌면 고른 업횟·축 상태를 새로 잡는다 (저장값을 읽어 오는 첫 렌더 포함).
+        <MultiMap
+          key={`${item.slots}|${item.axes.map((a) => a.label).join(',')}`}
+          item={item}
+          onHover={setHover}
+          onPick={onPick}
+        />
       )}
       <div className="mt-2 flex min-h-[34px] flex-wrap items-center gap-x-3 gap-y-1 border-t border-line pt-2 text-[11px]">
         {hover ? (
@@ -83,7 +106,8 @@ export function StrategyMap({
               남은 <b className="tabular text-ink-1">{hover.u}회</b> ·{' '}
               {item.axes.map((a, i) => (
                 <span key={a.label} className="mr-1">
-                  {a.label} <b className="tabular text-ink-1">{hover.values[i]}</b>
+                  {a.label}{' '}
+                  <b className="tabular text-ink-1">{valueText(a, hover.k[i])}</b>
                 </span>
               ))}
             </span>
@@ -155,10 +179,11 @@ function SingleMap({
 }) {
   const a = item.axes[0];
   const U = item.slots;
-  let lo = 0;
-  for (const layer of item.layers) lo = Math.min(lo, Math.max(layer.reachLo[0], a.deadR + 1));
+  // 축이 하나면 목표는 이 능력치 혼자의 최소값이다. 그 이상은 전부 달성이라 한 칸으로 접는다.
+  let lo = a.topK;
+  for (const layer of item.layers) lo = Math.min(lo, Math.max(layer.reachLo[0], a.deadK + 1));
   const columns: number[] = [];
-  for (let r = lo; r <= 0; r++) columns.push(r);
+  for (let k = lo; k <= a.topK; k++) columns.push(k);
 
   return (
     <div className="overflow-x-auto">
@@ -166,10 +191,13 @@ function SingleMap({
         <thead>
           <tr>
             <th className="w-10" />
-            {columns.map((r) => (
-              <th key={r} className="tabular pb-1 font-normal text-ink-3">
-                {valueOf(item, 0, r)}
-                {r === 0 ? '+' : ''}
+            {columns.map((k) => (
+              <th
+                key={k}
+                className={`tabular pb-1 font-normal ${k === a.topK ? 'text-accent' : 'text-ink-3'}`}
+              >
+                {valueOf(a, k)}
+                {k === a.topK ? '+' : ''}
               </th>
             ))}
           </tr>
@@ -178,13 +206,13 @@ function SingleMap({
           {Array.from({ length: U + 1 }, (_, k) => U - k).map((u) => (
             <tr key={u}>
               <th className="tabular pr-1 text-right font-normal text-ink-3">{u}회</th>
-              {columns.map((r) => {
-                const cell = cellAt(item, u, [r]);
+              {columns.map((k) => {
+                const cell = cellAt(item, u, [k]);
                 return (
-                  <td key={r} className="p-0">
+                  <td key={k} className="p-0">
                     <CellButton
                       cell={cell}
-                      isStart={u === U && r === a.r0}
+                      isStart={u === U && k === a.k0}
                       onHover={onHover}
                       onPick={onPick}
                       ariaLabel={`남은 ${u}회, ${a.label} ${cell.values[0]}: ${LOOK[cell.kind].name}`}
@@ -222,14 +250,7 @@ function MultiMap({
   const uu = Math.min(u, U);
   const layer = item.layers[uu];
 
-  const rangeOf = (i: number) => {
-    const a = item.axes[i];
-    const lo = Math.max(layer.reachLo[i], a.deadR + 1);
-    const hi = Math.min(layer.reachHi[i], layer.safe[i]);
-    const out: number[] = [];
-    for (let r = lo; r <= hi; r++) out.push(r);
-    return out;
-  };
+  const rangeOf = (i: number) => axisRange(item, layer, i);
 
   const others = item.axes.map((_, i) => i).filter((i) => i !== xAxis && i !== yAxis);
 
@@ -237,8 +258,10 @@ function MultiMap({
     item.axes.map((_, i) => {
       if (i === xAxis) return rx;
       if (i === yAxis) return ry;
+      const a = item.axes[i];
       const opts = rangeOf(i);
-      const want = fixed[i] ?? 0;
+      // 기본은 그 능력치의 개별 최소값(만족한 상태), 없으면 출발값.
+      const want = fixed[i] ?? (Number.isFinite(a.needK) ? a.needK : a.k0);
       return opts.length ? Math.max(opts[0], Math.min(opts[opts.length - 1], want)) : want;
     });
 
@@ -249,20 +272,23 @@ function MultiMap({
   let ys = rangeOf(yAxis);
   const fold = { x: xs[xs.length - 1], y: ys[ys.length - 1] };
   const sameCol = (a: number, b: number) => ys.every((ry) => kindAt(a, ry) === kindAt(b, ry));
-  while (xs.length > 1 && xs[xs.length - 1] > 0 && sameCol(xs[xs.length - 1], xs[xs.length - 2])) {
+  while (xs.length > 1 && sameCol(xs[xs.length - 1], xs[xs.length - 2])) {
     xs = xs.slice(0, -1);
   }
   const sameRow = (a: number, b: number) => xs.every((rx) => kindAt(rx, a) === kindAt(rx, b));
-  while (ys.length > 1 && ys[ys.length - 1] > 0 && sameRow(ys[ys.length - 1], ys[ys.length - 2])) {
+  while (ys.length > 1 && sameRow(ys[ys.length - 1], ys[ys.length - 2])) {
     ys = ys.slice(0, -1);
   }
   ys = ys.slice().reverse();
 
-  const label = (i: number, r: number) => {
+  const label = (i: number, k: number) => {
+    const a = item.axes[i];
+    if (k <= a.deadK) return '소멸';
     const top = i === xAxis ? xs[xs.length - 1] : i === yAxis ? ys[0] : layer.safe[i];
-    const folded = (i === xAxis ? fold.x : i === yAxis ? fold.y : layer.safe[i]) > r;
-    return `${valueOf(item, i, r)}${r === top && (folded || (r > 0 && r === layer.safe[i])) ? '+' : ''}`;
+    const folded = (i === xAxis ? fold.x : i === yAxis ? fold.y : layer.safe[i]) > k;
+    return `${valueOf(a, k)}${k === top && (folded || k === layer.safe[i]) ? '+' : ''}`;
   };
+  const isTarget = (i: number, k: number) => k === item.axes[i].needK;
 
   return (
     <div>
@@ -329,7 +355,7 @@ function MultiMap({
                 {xs.map((rx) => (
                   <th
                     key={rx}
-                    className={`tabular min-w-6 pb-1 font-normal ${rx === 0 ? 'text-accent' : 'text-ink-3'}`}
+                    className={`tabular min-w-6 pb-1 font-normal ${isTarget(xAxis, rx) ? 'text-accent' : 'text-ink-3'}`}
                   >
                     {label(xAxis, rx)}
                   </th>
@@ -340,14 +366,14 @@ function MultiMap({
               {ys.map((ry) => (
                 <tr key={ry}>
                   <th
-                    className={`tabular pr-1 text-right font-normal ${ry === 0 ? 'text-accent' : 'text-ink-3'}`}
+                    className={`tabular pr-1 text-right font-normal ${isTarget(yAxis, ry) ? 'text-accent' : 'text-ink-3'}`}
                   >
                     {label(yAxis, ry)}
                   </th>
                   {xs.map((rx) => {
-                    const r = rFor(rx, ry);
-                    const cell = cellAt(item, uu, r);
-                    const isStart = uu === U && r.every((ri, i) => ri === item.axes[i].r0);
+                    const k = rFor(rx, ry);
+                    const cell = cellAt(item, uu, k);
+                    const isStart = uu === U && k.every((ki, i) => ki === item.axes[i].k0);
                     return (
                       <td key={rx} className="p-0">
                         <CellButton
@@ -355,7 +381,7 @@ function MultiMap({
                           isStart={isStart}
                           onHover={onHover}
                           onPick={onPick}
-                          ariaLabel={`남은 ${uu}회, ${item.axes.map((a, i) => `${a.label} ${cell.values[i]}`).join(', ')}: ${LOOK[cell.kind].name}`}
+                          ariaLabel={`남은 ${uu}회, ${item.axes.map((a, i) => `${a.label} ${valueText(a, k[i])}`).join(', ')}: ${LOOK[cell.kind].name}`}
                         />
                       </td>
                     );
@@ -367,8 +393,10 @@ function MultiMap({
         </div>
       )}
       <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
-        빨간 숫자가 원하는 최소값입니다. 맨 위·맨 오른쪽의 <b className="text-ink-2">N+</b> 는
-        그 위로 판정이 전부 같아서 한 줄로 접은 것입니다.
+        빨간 숫자가 개별 최소값입니다. 맨 위·맨 오른쪽의 <b className="text-ink-2">N+</b> 는
+        그 위로 판정이 전부 같아서 한 줄로 접은 것이고, <b className="text-ink-2">소멸</b>은
+        0 이하로 떨어져 사라진 상태입니다 (합 목표에만 쓰이는 능력치는 사라져도 다른
+        능력치가 합을 메울 수 있습니다).
       </p>
     </div>
   );

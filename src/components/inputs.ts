@@ -32,6 +32,12 @@ export interface StatRow {
   min: number | null;
 }
 
+/** 합 목표 한 줄: 고른 능력치들의 합이 min 이상. 예) 덱스 + 럭 ≥ 30 */
+export interface SumRow {
+  ids: StatId[];
+  min: number | null;
+}
+
 /** 굴림 변화량의 범위. 혼돈의 주문서는 −5 ~ +5 다. */
 export const DELTA_MIN = -5;
 export const DELTA_MAX = 5;
@@ -50,6 +56,8 @@ export interface Inputs {
   itemName: string;
   slots: number;
   stats: StatRow[];
+  /** 합 목표들. 개별 최소값과 함께 전부 만족해야 달성. */
+  sums: SumRow[];
   /** 주문서 성공률 (%) */
   successRate: number;
   /** DELTA_VALUES 순서의 확률 (%) */
@@ -65,6 +73,7 @@ export interface Inputs {
 
 export const MAX_STATS = 8;
 export const MAX_TARGETS = 4;
+export const MAX_SUMS = 4;
 
 export const DEFAULT_INPUTS: Inputs = {
   itemName: '',
@@ -74,6 +83,7 @@ export const DEFAULT_INPUTS: Inputs = {
     { id: 'dex', start: 3, min: 6 },
     { id: 'def', start: 20, min: null },
   ],
+  sums: [],
   successRate: 60,
   deltas: DEFAULT_DELTAS,
   itemPrice: 10,
@@ -87,16 +97,35 @@ export type ProblemResult =
   | { ok: true; problem: ChaosProblem; targetIds: StatId[] }
   | { ok: false; reason: string };
 
+/** 실제로 쓰이는 합 목표 (최소값이 있고, 목록에 있는 능력치를 하나 이상 고른 것). */
+export function activeSums(inputs: Pick<Inputs, 'stats' | 'sums'>): Array<{ ids: StatId[]; min: number }> {
+  const present = new Set(inputs.stats.map((s) => s.id));
+  return inputs.sums
+    .map((g) => ({ ids: g.ids.filter((id) => present.has(id)), min: g.min }))
+    .filter((g): g is { ids: StatId[]; min: number } => g.ids.length > 0 && g.min !== null && g.min > 0);
+}
+
+/** "덱스+럭" 처럼 합 목표의 이름. */
+export function sumLabel(ids: readonly StatId[]): string {
+  return ids.map((id) => statKind(id).label).join('+');
+}
+
 /** 화면 입력 → 엔진 문제. 풀 수 없는 입력이면 이유를 돌려준다. */
 export function toProblem(inputs: Inputs): ProblemResult {
-  const targets = inputs.stats.filter((s) => s.min !== null && s.min > 0);
+  const sums = activeSums(inputs);
+  const inSum = new Set(sums.flatMap((g) => g.ids));
+  // 개별 최소값이 있거나 합 목표에 낀 능력치만 상태에 들어간다. 순서는 목록 순서.
+  const targets = inputs.stats.filter((s) => (s.min !== null && s.min > 0) || inSum.has(s.id));
   if (!targets.length) {
-    return { ok: false, reason: '원하는 최소값을 능력치 하나 이상에 적어 주세요.' };
+    return {
+      ok: false,
+      reason: '원하는 최소값을 능력치 하나 이상에 적거나, 합 목표를 하나 이상 만들어 주세요.',
+    };
   }
   if (targets.length > MAX_TARGETS) {
     return {
       ok: false,
-      reason: `최소값은 ${MAX_TARGETS}개 능력치까지만 걸 수 있습니다. 계산량이 능력치 수에 지수적으로 늘어납니다.`,
+      reason: `목표에 쓰이는 능력치는 ${MAX_TARGETS}개까지입니다 (개별 최소값과 합 목표를 합쳐서). 계산량이 능력치 수에 지수적으로 늘어납니다.`,
     };
   }
   if (inputs.itemPrice === null || inputs.scrollPrice === null) {
@@ -123,8 +152,17 @@ export function toProblem(inputs: Inputs): ProblemResult {
     })),
     stats: targets.map((s) => {
       const kind = statKind(s.id);
-      return { label: kind.label, start: s.start ?? 0, target: s.min!, step: kind.step };
+      return {
+        label: kind.label,
+        start: s.start ?? 0,
+        step: kind.step,
+        ...(s.min !== null && s.min > 0 ? { target: s.min } : {}),
+      };
     }),
+    sums: sums.map((g) => ({
+      stats: g.ids.map((id) => targets.findIndex((t) => t.id === id)),
+      min: g.min,
+    })),
     itemPrice: inputs.itemPrice * MAN,
     scrollPrice: inputs.scrollPrice * MAN,
     salvage: salvage * MAN,
