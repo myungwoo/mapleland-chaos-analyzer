@@ -9,7 +9,7 @@ import { useDebounced } from './useDebounced';
 import { NumberField, Panel, Stat } from './ui';
 
 /**
- * 지금 들고 있는 아이템(또는 장터에서 본 매물)을 넣으면 할 일을 알려 준다.
+ * 지금 들고 있는 아이템(또는 사려는 매물)을 넣으면 할 일을 알려 준다.
  *
  * 격자 칸이 아니라 아무 수치나 받는다 — 시작 수치가 다른 매물을 평가할 때도 쓰라는 뜻이다.
  * 그래서 이 상태에서 따로 풀고, 손절하면 전체 최소 기대비용으로 다시 시작한다고 본다.
@@ -103,11 +103,11 @@ export function StateAdvisor({
 
   if ('tooLarge' in result) {
     return (
-      <Panel title="현재 상황 판정" hint="지금 아이템 또는 장터 매물" right={resetButton}>
+      <Panel title="현재 상황 판정" hint="현재 아이템에 맞춘 전략과 분석" right={resetButton}>
         <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
           {fields}
           <p className="text-[13px] leading-relaxed text-ink-2">
-            이 수치에서는 따져 볼 상태가 {result.tooLarge.toLocaleString('ko-KR')}개로 너무 많아
+            이 수치에서는 따져 볼 경우의 수가 {result.tooLarge.toLocaleString('ko-KR')}개로 너무 많아
             판정할 수 없습니다. 수치나 남은 업횟을 바꾸거나 &ldquo;새 아이템으로&rdquo;를 눌러 주세요.
           </p>
         </div>
@@ -132,7 +132,7 @@ export function StateAdvisor({
         : 'var(--series-stop)';
 
   return (
-    <Panel title="현재 상황 판정" hint="지금 아이템 또는 장터 매물" right={resetButton}>
+    <Panel title="현재 상황 판정" hint="현재 아이템에 맞춘 전략과 분석" right={resetButton}>
       <div className="grid gap-3 md:grid-cols-[240px_minmax(0,1fr)]">
         {fields}
         <div className="flex flex-col gap-2">
@@ -146,17 +146,17 @@ export function StateAdvisor({
               sub={verdict.action === ACT_CONTINUE ? '전략대로 바를 때' : undefined}
             />
             <Stat
-              label="앞으로 더 들 돈"
+              label="남은 기대비용"
               value={formatMeso(verdict.remainingCost)}
-              sub="손절·재시작 포함 기대값"
+              sub="손절·재시작 포함"
             />
             <Stat
               label="더 바를 혼줌"
               value={`${verdict.scrollsHere.toFixed(1)}장`}
-              sub="이 아이템에, 기대값"
+              sub="이 아이템에 · 기대값"
             />
             <Stat
-              label="이 상태의 값어치"
+              label="이 아이템의 값어치"
               value={formatMeso(verdict.worth)}
               sub="이보다 싸면 사는 게 이득"
               tone="accent"
@@ -164,7 +164,7 @@ export function StateAdvisor({
           </div>
           <p className="text-[11px] leading-relaxed text-ink-3">
             &ldquo;값어치&rdquo;는 새 아이템부터 시작하는 기대비용({formatMeso(solution.expectedCost)})에서
-            이 상태로 이어 가는 기대비용을 뺀 값입니다. 장터에서 본 매물의 수치와 업횟을 넣으면
+            이 아이템으로 이어 가는 남은 기대비용을 뺀 값입니다. 사려는 매물의 수치와 업횟을 넣으면
             그 매물에 얼마까지 낼 만한지가 됩니다.
           </p>
         </div>

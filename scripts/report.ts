@@ -3,12 +3,12 @@
  *
  *   npm run report
  */
-import { analyze, COMMUNITY_DELTAS, type ChaosProblem } from '../src/lib/chaos';
+import { analyze, PUBLISHED_DELTAS, type ChaosProblem } from '../src/lib/chaos';
 import { formatMeso, formatPercent } from '../src/lib/format';
 
 const base: Omit<ChaosProblem, 'stats' | 'slots'> = {
   successRate: 0.6,
-  deltas: COMMUNITY_DELTAS,
+  deltas: PUBLISHED_DELTAS,
   itemPrice: 1_000_000,
   scrollPrice: 3_000_000,
   salvage: 0,

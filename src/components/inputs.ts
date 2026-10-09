@@ -1,4 +1,4 @@
-import { COMMUNITY_DELTAS, MAX_STATES, countStates, type ChaosProblem } from '@/lib/chaos';
+import { PUBLISHED_DELTAS, MAX_STATES, countStates, type ChaosProblem } from '@/lib/chaos';
 import { MAN } from '@/lib/format';
 
 /** 혼돈의 주문서가 건드리는 능력치. HP/MP 는 10 단위로 움직인다. */
@@ -46,9 +46,9 @@ export const DELTA_VALUES = Array.from(
   (_, i) => DELTA_MIN + i,
 );
 
-/** 블로그 측정치를 % 로. 자리표시자다. */
+/** 메이플스토리 공개 확률을 % 로. 메이플랜드에 맞는지는 가정이다. */
 export const DEFAULT_DELTAS = DELTA_VALUES.map(
-  (v) => +((COMMUNITY_DELTAS.find((d) => d.value === v)?.probability ?? 0) * 100).toFixed(2),
+  (v) => +((PUBLISHED_DELTAS.find((d) => d.value === v)?.probability ?? 0) * 100).toFixed(2),
 );
 
 export interface Inputs {
@@ -136,12 +136,12 @@ export function toProblem(inputs: Inputs): ProblemResult {
     return {
       ok: false,
       reason:
-        '포기한 아이템의 회수가는 아이템 가격보다 낮아야 합니다. 같거나 높으면 사서 바로 되팔기만 해도 손해가 없어 답이 정해지지 않습니다.',
+        '회수가는 아이템 가격보다 낮아야 합니다. 같거나 높으면 사서 바로 되팔기만 해도 손해가 없어 답이 정해지지 않습니다.',
     };
   }
   const deltaTotal = inputs.deltas.reduce((a, b) => a + (b > 0 ? b : 0), 0);
-  if (!(deltaTotal > 0)) return { ok: false, reason: '변화량 확률이 전부 0 입니다.' };
-  if (!(inputs.successRate > 0)) return { ok: false, reason: '성공률이 0% 이면 아무것도 바뀌지 않습니다.' };
+  if (!(deltaTotal > 0)) return { ok: false, reason: '변화량 확률이 전부 0입니다.' };
+  if (!(inputs.successRate > 0)) return { ok: false, reason: '성공률이 0%이면 아무것도 바뀌지 않습니다.' };
 
   const problem: ChaosProblem = {
     slots: inputs.slots,
@@ -176,7 +176,7 @@ export function toProblem(inputs: Inputs): ProblemResult {
   if (states > MAX_STATES) {
     return {
       ok: false,
-      reason: `상태가 ${states.toLocaleString('ko-KR')}개로 너무 많습니다. 최소값을 건 능력치 수나 업횟을 줄여 주세요.`,
+      reason: `따져 볼 경우의 수가 ${states.toLocaleString('ko-KR')}개로 너무 많습니다. 목표에 쓰는 능력치 수나 업횟을 줄여 주세요.`,
     };
   }
 

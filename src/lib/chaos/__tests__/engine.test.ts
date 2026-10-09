@@ -3,7 +3,7 @@ import {
   ACT_CONTINUE,
   ACT_GOAL,
   analyze,
-  COMMUNITY_DELTAS,
+  PUBLISHED_DELTAS,
   costDistribution,
   cycleOutcomes,
   finalStatDistribution,
@@ -20,7 +20,7 @@ import {
 
 const base = {
   successRate: 0.6,
-  deltas: COMMUNITY_DELTAS,
+  deltas: PUBLISHED_DELTAS,
   itemPrice: 1_000_000,
   scrollPrice: 3_000_000,
   salvage: 0,
@@ -337,7 +337,7 @@ describe('합 목표', () => {
   });
 
   it('업횟을 다 바른 합 분포는 직접 굴린 것과 맞는다', () => {
-    const problem = { successRate: 0.6, deltas: COMMUNITY_DELTAS };
+    const problem = { successRate: 0.6, deltas: PUBLISHED_DELTAS };
     const stats = [
       { start: 4, step: 1 },
       { start: 2, step: 1 },
@@ -346,7 +346,7 @@ describe('합 목표', () => {
     expect(exact.reduce((a, o) => a + o.probability, 0)).toBeCloseTo(1, 12);
 
     // 3회를 전부 펼쳐서 센다
-    const k = kernelOf(COMMUNITY_DELTAS);
+    const k = kernelOf(PUBLISHED_DELTAS);
     const brute = new Map<number, number>();
     const walk = (u: number, vals: number[], m: number) => {
       if (u === 0) {

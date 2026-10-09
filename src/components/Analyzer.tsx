@@ -42,7 +42,7 @@ export function Analyzer() {
           메이플랜드 혼돈의 주문서 분석기
         </h1>
         <p className="text-[11px] text-ink-3">
-          원하는 능력치까지의 최소 기대비용 전략과 손절 시점을 동적계획으로 정확히 계산합니다
+          입력한 확률을 바탕으로 원하는 능력치까지의 최소 기대비용 전략과 손절 시점을 계산합니다
         </p>
       </header>
 
@@ -66,7 +66,7 @@ export function Analyzer() {
               onProgress={setProgress}
             />
           ) : (
-            <Panel title="입력이 더 필요합니다">
+            <Panel title="계산할 수 없습니다">
               <p className="text-[12px] leading-relaxed text-ink-2">{result.reason}</p>
             </Panel>
           )}
@@ -74,8 +74,8 @@ export function Analyzer() {
       </div>
 
       <footer className="mt-4 border-t border-line pt-3 text-[11px] leading-relaxed text-ink-3">
-        혼돈의 주문서 확률은 유저 측정치를 기본값으로 둔 가정입니다. 아이콘은 넥슨의 저작물이며,
-        이 도구는 넥슨과 관계가 없습니다.
+        혼돈의 주문서 확률의 기본값은 메이플스토리에 공개된 확률로, 메이플랜드의 실제 확률과 다를 수
+        있습니다. 아이콘은 넥슨의 저작물이며, 이 도구는 넥슨과 관계가 없습니다.
       </footer>
     </div>
   );
@@ -107,8 +107,8 @@ function Results({
     return (
       <Panel title="불가능합니다">
         <p className="text-[12px] leading-relaxed text-ink-2">
-          업횟 {problem.slots}회로는 {goalText} 이상을 만들 방법이 없습니다. 지금 수치가 0 인
-          능력치는 혼돈의 주문서로 생기지 않으며, 한 번에 오를 수 있는 폭에도 한계가 있습니다.
+          업횟 {problem.slots}회로는 {goalText} 이상을 만들 방법이 없습니다. 지금 수치가 0인
+          능력치는 혼돈의 주문서로 생기지 않고, 한 번에 오르는 폭에도 한계가 있습니다.
         </p>
       </Panel>
     );
@@ -126,7 +126,7 @@ function Results({
       <Panel title="결론" hint={`목표: ${goalText} 이상`}>
         {alreadyDone ? (
           <p className="text-[15px] leading-relaxed text-ink-1">
-            시작 수치가 이미 목표를 만족합니다. 혼줌을 바를 이유가 없습니다.
+            시작 수치가 이미 목표를 채웁니다. 혼돈의 주문서를 바를 필요가 없습니다.
           </p>
         ) : (
           <p className="text-[15px] leading-relaxed text-ink-1">
@@ -137,15 +137,15 @@ function Results({
         )}
         <div className="mt-3 grid grid-cols-2 gap-2 xl:grid-cols-4">
           <Stat
-            label="기대 총비용"
+            label="기대비용"
             value={formatMeso(solution.expectedCost)}
-            sub={problem.salvage > 0 ? '실패작 회수 반영' : '실패작 회수 0'}
+            sub={problem.salvage > 0 ? '회수가 반영' : '회수가 0'}
             tone="accent"
           />
           <Stat
             label="필요한 아이템"
             value={`${analysis.expectedItems.toFixed(1)}개`}
-            sub={`절반은 ${analysis.itemQuantiles.p50}개, 90%는 ${analysis.itemQuantiles.p90}개 안`}
+            sub={`절반은 ${analysis.itemQuantiles.p50}개 이내, 90%는 ${analysis.itemQuantiles.p90}개 이내`}
           />
           <Stat
             label="필요한 혼돈의 주문서"
@@ -153,14 +153,14 @@ function Results({
             sub={`아이템당 ${solution.scrollsPerItem.toFixed(1)}장`}
           />
           <Stat
-            label="아이템 1개로 성공"
+            label="한 번에 달성할 확률"
             value={formatPercent(analysis.oneShot)}
-            sub={`손절 없이 끝까지 · 전략대로면 ${formatPercent(solution.successPerItem)}`}
+            sub={`손절 없이 바를 때 · 전략대로면 ${formatPercent(solution.successPerItem)}`}
           />
         </div>
         {costQuantiles && (
           <div className="mt-2 grid grid-cols-2 gap-2 xl:grid-cols-4">
-            <Stat label="지출 중앙값" value={formatMeso(costQuantiles.p50)} sub="절반은 이 안에 끝남" />
+            <Stat label="지출 중앙값" value={formatMeso(costQuantiles.p50)} sub="절반은 이 금액 안에 달성" />
             <Stat
               label="운 나쁘면 (상위 10%)"
               value={formatMeso(costQuantiles.p90)}
@@ -169,7 +169,7 @@ function Results({
             />
             {budget !== null && distribution && (
               <Stat
-                label="예산 안에 성공"
+                label="예산 안에 달성"
                 value={formatPercent(distribution.probabilityWithin(budget))}
                 sub={`예산 ${formatMeso(budget)}`}
               />
@@ -186,9 +186,9 @@ function Results({
         )}
         {!alreadyDone && saves > 1 && (
           <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
-            손절 없이 업횟을 다 바르는 것보다 기대비용이{' '}
-            <b className="text-ink-2">{formatMeso(saves)}</b> 적습니다. 아이템 1개의 성공 확률은
-            낮아지지만, 가망이 줄어든 아이템에 혼줌을 붓지 않아서입니다.
+            손절 없이 업횟을 다 바를 때보다 기대비용이{' '}
+            <b className="text-ink-2">{formatMeso(saves)}</b> 적습니다. 아이템 하나로 달성할 확률은
+            낮아지지만, 가망이 줄어든 아이템에 혼돈의 주문서를 더 붓지 않기 때문입니다.
           </p>
         )}
       </Panel>
@@ -213,7 +213,7 @@ function Results({
       )}
 
       {distribution && !alreadyDone && (
-        <Panel title="쓸 돈별 성공 확률" hint="최적 전략을 그대로 따를 때">
+        <Panel title="쓸 돈별 달성 확률" hint="최적 전략을 그대로 따를 때">
           <ProbabilityCurve
             xLabel="쓸 수 있는 돈"
             series={[
@@ -227,29 +227,29 @@ function Results({
             markers={[
               ...(costQuantiles
                 ? [
-                    { x: costQuantiles.p50, label: '중앙' },
-                    { x: costQuantiles.p90, label: '상위10%' },
+                    { x: costQuantiles.p50, label: '중앙값' },
+                    { x: costQuantiles.p90, label: '상위 10%' },
                   ]
                 : []),
               ...(budget !== null ? [{ x: budget, label: '내 예산' }] : []),
             ]}
           />
           <p className="mt-2 border-t border-line pt-2 text-[11px] leading-relaxed text-ink-3">
-            그 금액 안에서 목표 아이템이 나올 확률입니다. 실패작 회수액은 다음 아이템을 사는 데 다시
-            쓴다고 보고 지출에서 뺐습니다. 예산이 빠듯하면 전략을 바꿔(더 일찍 손절하는 등) 확률을
-            조금 더 올릴 여지가 있지만, 이 곡선은 기대비용을 최소로 하는 전략 그대로의 값입니다.
+            그 금액 안에 목표를 달성할 확률입니다. 회수가는 다음 아이템을 사는 데 보탠다고 보고
+            지출에서 뺐습니다. 기대비용을 최소로 하는 전략 그대로의 값이라, 예산이 빠듯하면 전략을
+            바꿔(더 일찍 손절하는 등) 확률을 조금 더 올릴 여지는 있습니다.
           </p>
         </Panel>
       )}
 
       <div className="grid gap-4 xl:grid-cols-2">
-        <Panel title="전략 비교" hint="같은 조건">
+        <Panel title="전략 비교" hint="같은 시세·확률 기준">
           <table className="w-full text-[11px]">
             <thead>
               <tr className="text-ink-3">
                 <th className="pb-1 text-left font-normal">전략</th>
-                <th className="pb-1 text-right font-normal">기대 총비용</th>
-                <th className="pb-1 text-right font-normal">아이템당 성공</th>
+                <th className="pb-1 text-right font-normal">기대비용</th>
+                <th className="pb-1 text-right font-normal">아이템당 달성</th>
                 <th className="pb-1 text-right font-normal">아이템</th>
                 <th className="pb-1 text-right font-normal">혼줌</th>
               </tr>
@@ -268,13 +268,13 @@ function Results({
           </table>
           <p className="mt-2 border-t border-line pt-2 text-[11px] leading-relaxed text-ink-3">
             &ldquo;손절 없이 끝까지&rdquo;도 목표에 닿는 순간 멈추고, 가망이 아예 없어진 아이템은
-            버립니다. 차이는 <b className="text-ink-2">가망이 남았지만 낮은</b> 아이템을 어떻게
+            처분합니다. 차이는 <b className="text-ink-2">가망이 남았지만 낮은</b> 아이템을 어떻게
             하느냐입니다.
           </p>
         </Panel>
 
         {analysis.leftoverSlots.length > 0 && !alreadyDone && (
-          <Panel title="달성했을 때 남는 업횟" hint="성공한 아이템 기준">
+          <Panel title="달성했을 때 남는 업횟" hint="달성한 아이템 기준">
             <BarList
               rows={analysis.leftoverSlots.map((o) => ({ label: `${o.value}회 남음`, value: o.probability }))}
               format={(v) => formatPercent(v)}

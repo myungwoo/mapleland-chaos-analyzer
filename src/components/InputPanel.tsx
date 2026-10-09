@@ -106,15 +106,15 @@ export function InputPanel({
             </div>
           </div>
           <NumberField
-            label="실패작 회수"
+            label="회수가"
             value={inputs.salvage}
             onChange={(v) => patch({ salvage: v })}
             suffix="만"
             placeholder="0"
           />
           <p className="text-[11px] leading-relaxed text-ink-3">
-            목표에 못 미쳐 포기한 아이템 1개를 처분해 돌려받는 돈입니다. 상점가든 시세든
-            대충의 평균이면 됩니다. 아이템 가격보다는 낮아야 합니다.
+            목표를 포기한 아이템 하나를 처분해 돌려받는 돈입니다. 상점에 팔든 다른 유저에게 팔든
+            평균적으로 받는 값을 넣으세요. 아이템 가격보다 낮아야 합니다.
           </p>
           <NumberField
             label="완성품"
@@ -210,8 +210,8 @@ function StatEditor({
       )}
       <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
         최소값과 아래 합 목표가 <b className="text-ink-2">모두</b> 동시에 채워지면 달성입니다.
-        목표에 쓰이는 능력치 {axes}/{MAX_TARGETS}. 목표에 안 쓰이는 능력치는 결과 분포에만
-        쓰입니다. 0 이하로 떨어진 능력치는 사라져 다시 오르지 않습니다.
+        목표에 쓰이는 능력치 {axes}/{MAX_TARGETS}. 목표에 안 쓰이는 능력치는 결과의 &lsquo;업횟을
+        전부 바르면&rsquo;에만 나옵니다. 0 이하로 떨어진 능력치는 소멸해 다시 오르지 않습니다.
       </p>
     </div>
   );
@@ -231,7 +231,7 @@ function SumEditor({ inputs, onChange }: { inputs: Inputs; onChange: (s: SumRow[
       {sums.length === 0 && (
         <p className="text-[11px] leading-relaxed text-ink-3">
           여러 능력치의 <b className="text-ink-2">합</b>이 일정 이상이면 되는 경우(합스탯 작)에
-          씁니다. 사라진 능력치는 0 으로 칩니다.
+          씁니다. 소멸한 능력치는 0으로 칩니다.
         </p>
       )}
       {sums.map((g, i) => {
@@ -398,7 +398,7 @@ function MiniNumber({
 /**
  * 성공 시 능력치 하나의 변화량 분포.
  *
- * 블로그 값은 유저 측정치일 뿐이라, 이 표가 이 도구에서 가장 "가정"인 부분이다. 막대를
+ * 메이플스토리 공개 확률이 메이플랜드에도 맞는지 알 수 없어, 이 표가 이 도구에서 가장 "가정"인 부분이다. 막대를
  * 같이 그려서 무엇을 가정하고 있는지 한눈에 보이게 했다. 합이 100 이 아니어도 비율로 쓴다.
  */
 function DeltaEditor({ deltas, onChange }: { deltas: number[]; onChange: (d: number[]) => void }) {
@@ -458,7 +458,7 @@ function DeltaEditor({ deltas, onChange }: { deltas: number[]; onChange: (d: num
           className="inset px-2 py-0.5 text-ink-2 enabled:hover:text-ink-1 disabled:opacity-40"
           onClick={() => onChange(DEFAULT_DELTAS.slice())}
         >
-          블로그 값으로
+          공개 확률로
         </button>
       </div>
       <p className="mt-2 text-[11px] leading-relaxed text-ink-3">
@@ -469,10 +469,10 @@ function DeltaEditor({ deltas, onChange }: { deltas: number[]; onChange: (d: num
           target="_blank"
           rel="noreferrer"
         >
-          유저들이 정리한 측정치
+          메이플스토리에 공개된 확률
         </a>
-        입니다. 메이플랜드의 실제 확률은 알려지지 않았으니 바꿔 가며 결과가 얼마나 흔들리는지
-        보세요. 최대 HP·MP 는 이 값의 10배씩 움직입니다.
+        입니다. 메이플랜드에도 같은 확률이 적용되는지는 알 수 없으니, 바꿔 가며 결과가 얼마나
+        흔들리는지 보세요. 최대 HP·MP는 이 값의 10배씩 움직입니다.
       </p>
     </div>
   );

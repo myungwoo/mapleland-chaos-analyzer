@@ -17,10 +17,10 @@ export * from './solve';
 export * from './distribution';
 
 /**
- * 블로그에 정리된 유저 측정치 (velog @darkpppet, "메이플 혼돈의 주문서 확률").
- * 인게임 실제 확률이 아니라 **자리표시자**다. 화면에서 얼마든지 바꿔 볼 수 있다.
+ * 메이플스토리에 공개된 확률 (정리: velog @darkpppet, "메이플 혼돈의 주문서 확률").
+ * 메이플랜드에도 같은 확률이 적용되는지는 알 수 없어 **가정**이다. 화면에서 바꿔 볼 수 있다.
  */
-export const COMMUNITY_DELTAS: Outcome[] = [
+export const PUBLISHED_DELTAS: Outcome[] = [
   { value: -5, probability: 0.0494 },
   { value: -4, probability: 0.0297 },
   { value: -3, probability: 0.0365 },
@@ -112,7 +112,7 @@ export function analyze(problem: ChaosProblem): Analysis {
   ];
 
   if (problem.salvage > 0 && problem.salvage >= problem.itemPrice * 0.95) {
-    warnings.push('회수가가 매물가에 거의 붙어 있습니다. 실제로 그 값에 팔리는지 확인해 주세요.');
+    warnings.push('회수가가 아이템 가격과 거의 같습니다. 실제로 그 값에 팔리는지 확인해 주세요.');
   }
 
   return {
